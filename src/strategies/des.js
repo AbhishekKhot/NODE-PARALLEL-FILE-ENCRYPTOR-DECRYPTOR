@@ -1,22 +1,45 @@
 const crypto = require("crypto");
+require("dotenv").config();
 
 class DES {
-  constructor(key) {
-    this.key = crypto.scryptSync(key, "salt", 8);
-    this.algorithm = "des-cbc";
+  constructor() {
+    this.method = process.env.DES_ENCRYPTION_METHOD;
   }
 
-  encrypt(data) {
-    const iv = crypto.randomBytes(8);
-    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
-    return Buffer.concat([iv, cipher.update(data), cipher.final()]);
+  encrypt(buffer) {
+    const { key, iv } = this.#getKeyAndIv();
+    const cipher = crypto.createCipheriv(this.method, key, iv);
+    const encryptedChunk = Buffer.concat([
+      cipher.update(buffer),
+      cipher.final(),
+    ]);
+    return encryptedChunk;
   }
 
-  decrypt(data) {
-    const iv = data.slice(0, 8);
-    const encryptedData = data.slice(8);
-    const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
-    return Buffer.concat([decipher.update(encryptedData), decipher.final()]);
+  decrypt(buffer) {
+    const { key, iv } = this.#getKeyAndIv();
+    const decipher = crypto.createDecipheriv(this.method, key, iv);
+    const decryptedChunk = Buffer.concat([
+      decipher.update(buffer),
+      decipher.final(),
+    ]);
+    return decryptedChunk;
+  }
+
+  #getKeyAndIv() {
+    const key = crypto
+      .createHash("sha512")
+      .update(process.env.DES_SECRET_KEY)
+      .digest("hex")
+      .substring(0, 24);
+
+    const iv = crypto
+      .createHash("sha512")
+      .update(process.env.DES_SECRET_IV)
+      .digest("hex")
+      .substring(0, 8);
+
+    return { key, iv };
   }
 }
 

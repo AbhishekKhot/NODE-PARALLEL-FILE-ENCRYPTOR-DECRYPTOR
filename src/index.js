@@ -1,12 +1,8 @@
 const inquirer = require("inquirer");
 const path = require("path");
 const fs = require("fs");
-const Cryption = require("./cryption");
-const AES = require("./strategies/aes");
-const DES = require("./strategies/des");
-const RSA = require("./strategies/rsa");
-const XOR = require("./strategies/xor");
 const { ACTIONS } = require("./lib/constant");
+const { Worker } = require("worker_threads");
 
 async function main() {
   const { action, directory, algorithm, key } = await inquirer.prompt([
@@ -25,62 +21,55 @@ async function main() {
       type: "list",
       name: "algorithm",
       message: "Choose an algorithm: ",
-      choices: ["AES", "DES", "RSA", "XOR"],
+      choices: ["AES", "DES", "RSA"],
     },
   ]);
 
-  let strategy;
-  switch (algorithm) {
-    case "AES":
-      strategy = new AES();
-      break;
-    case "DES":
-      strategy = new DES(key);
-      break;
-    case "RSA":
-      const publicKey = fs.readFileSync(
-        path.join(__dirname, "../keys/rsa_public.pem")
-      );
-      const privateKey = fs.readFileSync(
-        path.join(__dirname, "../keys/rsa_private.pem")
-      );
-      strategy = new RSA(publicKey, privateKey);
-      break;
-    case "XOR":
-      strategy = new XOR();
-      break;
-    default:
-      return;
+  const files = await fs.promises.readdir(directory);
+  const outputDirectory =
+    action == ACTIONS.ENCRYPT ? "encrypted_files" : "decrypted_files";
+
+  if (!fs.existsSync(outputDirectory)) {
+    fs.mkdirSync(outputDirectory);
   }
 
-  const cryption = new Cryption(strategy);
+  const promises = [];
+  for (const file of files) {
+    const inputFilePath = path.join(directory, file);
+    const outputFilePath = path.join(outputDirectory, file);
 
-  try {
-    const files = await fs.promises.readdir(directory);
-    for (const file of files) {
-      const inputFilePath = path.join(directory, file);
-
-      const outputDirectory =
-        action == ACTIONS.ENCRYPT ? "encrypted_files" : "decrypted_files";
-      const outputFilePath = path.join(outputDirectory, file);
-
-      const fileStats = await fs.promises.lstat(inputFilePath);
-      if (!fileStats.isFile()) {
-        throw new Error("The specified path is not a file.");
-      }
-
-      if (action === ACTIONS.DECRYPT) {
-        await cryption.decrypt(inputFilePath, outputFilePath);
-        console.log("File decrypted successfully!");
-      } else {
-        await cryption.encrypt(inputFilePath, outputFilePath);
-        console.log("File encrypted successfully!");
-      }
-      await fs.promises.unlink(inputFilePath);
+    const fileStats = await fs.promises.lstat(inputFilePath);
+    if (!fileStats.isFile()) {
+      throw new Error("The specified path is not a file.");
     }
-  } catch (error) {
-    console.log("Something went wrong, ", error.message);
+
+    /* Push a new promise for each worker thread */
+    promises.push(runWorker(action, algorithm, inputFilePath, outputFilePath));
   }
+
+  /* Wait for all worker threads to finish processing */
+  await Promise.all(promises);
+}
+
+function runWorker(action, algorithm, inputFilePath, outputFilePath) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, "worker.js"), {
+      workerData: { action, algorithm, inputFilePath, outputFilePath },
+    });
+    worker.on("message", (message) => {
+      console.log(message);
+      resolve();
+    });
+    worker.on("error", (error) => {
+      console.log(error.message);
+      reject(error);
+    });
+    worker.on("exit", (code) => {
+      if (code != 0) {
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
+  });
 }
 
 main();
