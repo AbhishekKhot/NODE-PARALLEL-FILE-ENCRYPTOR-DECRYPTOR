@@ -4,7 +4,6 @@ const fs = require("fs");
 const Cryption = require("./cryption");
 const AES = require("./strategies/aes");
 const DES = require("./strategies/des");
-const RSA = require("./strategies/rsa");
 
 async function processFiles({
   action,
@@ -40,8 +39,6 @@ function getStrategy(algorithm) {
       return new AES();
     case "DES":
       return new DES();
-    case "RSA":
-      return new RSA();
     default:
       return;
   }

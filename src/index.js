@@ -5,7 +5,7 @@ const { ACTIONS } = require("./lib/constant");
 const { Worker } = require("worker_threads");
 
 async function main() {
-  const { action, directory, algorithm, key } = await inquirer.prompt([
+  const { action, directory, algorithm } = await inquirer.prompt([
     {
       type: "list",
       name: "action",
@@ -21,7 +21,7 @@ async function main() {
       type: "list",
       name: "algorithm",
       message: "Choose an algorithm: ",
-      choices: ["AES", "DES", "RSA"],
+      choices: ["AES", "DES"],
     },
   ]);
 
